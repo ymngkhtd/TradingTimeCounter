@@ -1,0 +1,6 @@
+{
+    "cmake.sourceDirectory": "G:/code/remote/trading/tradingTimeCounter/tradingTimeCounter",
+    "files.associations": {
+        "iostream": "cpp"
+    }
+}
