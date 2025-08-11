@@ -1,9 +1,14 @@
 #include "tradingTimeCounter/App.h"
 #include <iostream>
+#include <thread>
+#include <chrono>
 
 #ifdef _WIN32
 #include "tradingTimeCounter/WindowsOverlay.h"
 #include <windows.h>
+#elif __APPLE__
+#include "tradingTimeCounter/MacOSOverlay.h"
+#include "tradingTimeCounter/MacOSEventProcessor.h"
 #endif
 
 namespace TradingTimeCounter {
@@ -34,9 +39,8 @@ bool App::initialize(const DisplayConfig& displayConfig) {
             return false;
         }
         
-        // Set timer callback - create a proper shared_ptr
-        auto selfCallback = std::shared_ptr<ITimerCallback>(std::shared_ptr<ITimerCallback>{}, this);
-        m_timer->setCallback(selfCallback);
+        // Set timer callback - use raw pointer for owned object
+        m_timer->setCallbackRaw(this);
         
         // Create display component
         std::cout << "Creating display manager..." << std::endl;
@@ -74,6 +78,11 @@ void App::start() {
         std::cerr << "Cannot start: application not properly initialized" << std::endl;
         return;
     }
+    
+#ifdef __APPLE__
+    // Initialize macOS application
+    MacOSEventProcessor::initializeApplication();
+#endif
     
     m_isRunning = true;
     m_shouldExit = false;
@@ -121,6 +130,15 @@ int App::run() {
         
         // Small sleep to prevent high CPU usage
         Sleep(10);
+    }
+#elif __APPLE__
+    // macOS event loop on main thread
+    while (!m_shouldExit) {
+        // Process macOS events
+        MacOSEventProcessor::processPendingEvents();
+        
+        // Small sleep to prevent high CPU usage
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 #else
     // For other platforms, we'll need different message loop implementation
@@ -179,8 +197,11 @@ const DisplayConfig& App::getDisplayConfig() const {
 
 // ITimerCallback interface implementation
 void App::onTimerUpdate(int remainingSeconds) {
+    std::cout << "DEBUG: onTimerUpdate called with remainingSeconds=" << remainingSeconds << std::endl;
     if (m_display) {
-        m_display->updateText(m_timer->getFormattedTime());
+        std::string formattedTime = m_timer->getFormattedTime();
+        std::cout << "DEBUG: Updating display with time: " << formattedTime << std::endl;
+        m_display->updateText(formattedTime);
     }
     // Only log significant timer milestones to reduce output
     if (remainingSeconds % 30 == 0 || remainingSeconds <= 10) {
@@ -200,11 +221,11 @@ void App::onTimerCompleted() {
 }
 
 void App::onTimerStarted() {
-    std::cout << "Timer started" << std::endl;
+    std::cout << "DEBUG: Timer started callback called" << std::endl;
 }
 
 void App::onTimerStopped() {
-    std::cout << "Timer stopped" << std::endl;
+    std::cout << "DEBUG: Timer stopped callback called" << std::endl;
 }
 
 void App::onWindowCloseRequested() {
@@ -221,6 +242,8 @@ void App::onWindowPositionChanged(int x, int y) {
 std::unique_ptr<IDisplayManager> App::createDisplayManager() {
 #ifdef _WIN32
     return std::make_unique<WindowsOverlay>();
+#elif __APPLE__
+    return std::make_unique<MacOSOverlay>();
 #else
     // For other platforms, create appropriate display manager
     std::cerr << "Display manager not implemented for this platform" << std::endl;

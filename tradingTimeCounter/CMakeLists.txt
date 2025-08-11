@@ -19,6 +19,8 @@ set(CORE_SOURCES
 set(PLATFORM_SOURCES)
 if(WIN32)
     list(APPEND PLATFORM_SOURCES src/WindowsOverlay.cpp)
+elseif(APPLE)
+    list(APPEND PLATFORM_SOURCES src/MacOSOverlay.mm src/MacOSEventProcessor.mm)
 endif()
 
 # All source files
@@ -35,6 +37,8 @@ set(ALL_HEADERS
 # Platform-specific headers
 if(WIN32)
     list(APPEND ALL_HEADERS include/tradingTimeCounter/WindowsOverlay.h)
+elseif(APPLE)
+    list(APPEND ALL_HEADERS include/tradingTimeCounter/MacOSOverlay.h include/tradingTimeCounter/MacOSEventProcessor.h)
 endif()
 
 # Create timer library
@@ -48,6 +52,21 @@ target_compile_features(TimerCore PUBLIC cxx_std_17)
 if(WIN32)
     target_compile_definitions(TimerCore PRIVATE WIN32_LEAN_AND_MEAN)
     target_link_libraries(TimerCore PRIVATE user32 gdi32)
+elseif(APPLE)
+    # Enable Objective-C++ for macOS
+    set_source_files_properties(src/MacOSOverlay.mm PROPERTIES 
+        COMPILE_FLAGS "-x objective-c++ -fobjc-arc"
+    )
+    set_source_files_properties(src/MacOSEventProcessor.mm PROPERTIES 
+        COMPILE_FLAGS "-x objective-c++ -fobjc-arc"
+    )
+    
+    # Link with Cocoa framework
+    find_library(COCOA_LIBRARY Cocoa)
+    target_link_libraries(TimerCore PRIVATE ${COCOA_LIBRARY})
+    
+    # Set minimum macOS version
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.14" CACHE STRING "Minimum OS X deployment version")
 endif()
 
 # Main executable (placeholder for now)

@@ -38,6 +38,12 @@ public:
     void setCallback(std::shared_ptr<ITimerCallback> callback);
     
     /**
+     * @brief Set timer callback using raw pointer (safer for owned objects)
+     * @param callback Raw pointer to callback interface
+     */
+    void setCallbackRaw(ITimerCallback* callback);
+    
+    /**
      * @brief Start the countdown timer
      */
     void start();
@@ -89,7 +95,8 @@ private:
     std::atomic<bool> m_isRunning;                       ///< Running state flag
     std::atomic<bool> m_shouldStop;                      ///< Stop request flag
     
-    std::shared_ptr<ITimerCallback> m_callback;          ///< Timer callback interface
+    std::shared_ptr<ITimerCallback> m_callback;          ///< Timer callback interface (shared_ptr)
+    ITimerCallback* m_callbackRaw;                       ///< Timer callback interface (raw pointer)
     std::unique_ptr<std::thread> m_timerThread;          ///< Timer execution thread
 };
 

@@ -10,6 +10,7 @@ CountdownTimer::CountdownTimer(int durationMinutes)
     , m_isRunning(false)
     , m_shouldStop(false)
     , m_callback(nullptr)
+    , m_callbackRaw(nullptr)
     , m_timerThread(nullptr) {
 }
 
@@ -19,6 +20,12 @@ CountdownTimer::~CountdownTimer() {
 
 void CountdownTimer::setCallback(std::shared_ptr<ITimerCallback> callback) {
     m_callback = callback;
+    m_callbackRaw = nullptr; // Clear raw pointer when using shared_ptr
+}
+
+void CountdownTimer::setCallbackRaw(ITimerCallback* callback) {
+    m_callbackRaw = callback;
+    m_callback.reset(); // Clear shared_ptr when using raw pointer
 }
 
 void CountdownTimer::start() {
@@ -35,6 +42,8 @@ void CountdownTimer::start() {
     // Notify callback
     if (m_callback) {
         m_callback->onTimerStarted();
+    } else if (m_callbackRaw) {
+        m_callbackRaw->onTimerStarted();
     }
 }
 
@@ -55,6 +64,8 @@ void CountdownTimer::stop() {
     // Notify callback
     if (m_callback) {
         m_callback->onTimerStopped();
+    } else if (m_callbackRaw) {
+        m_callbackRaw->onTimerStopped();
     }
 }
 
@@ -104,6 +115,8 @@ void CountdownTimer::timerThreadFunction() {
             // Notify callback of update
             if (m_callback) {
                 m_callback->onTimerUpdate(remaining);
+            } else if (m_callbackRaw) {
+                m_callbackRaw->onTimerUpdate(remaining);
             }
             
             // Check if timer completed
@@ -111,6 +124,8 @@ void CountdownTimer::timerThreadFunction() {
                 m_isRunning.store(false);
                 if (m_callback) {
                     m_callback->onTimerCompleted();
+                } else if (m_callbackRaw) {
+                    m_callbackRaw->onTimerCompleted();
                 }
                 break;
             }
