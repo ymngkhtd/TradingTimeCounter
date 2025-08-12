@@ -1,19 +1,19 @@
 #include "tradingTimeCounter/CountdownTimer.h"
 #include <sstream>
 #include <iomanip>
+#include <ctime>
+#include <chrono>
 
 namespace TradingTimeCounter {
 
-CountdownTimer::CountdownTimer(int durationMinutes)
+CountdownTimer::CountdownTimer(int durationMinutes) 
     : m_totalDuration(durationMinutes * 60)
-    , m_remainingSeconds(m_totalDuration)
+    , m_remainingSeconds(calculateInitialRemainingTime())
     , m_isRunning(false)
     , m_shouldStop(false)
     , m_callback(nullptr)
     , m_timerThread(nullptr) {
-}
-
-CountdownTimer::~CountdownTimer() {
+}CountdownTimer::~CountdownTimer() {
     stop();
 }
 
@@ -90,7 +90,7 @@ std::string CountdownTimer::getFormattedTime() const {
 void CountdownTimer::timerThreadFunction() {
     auto lastUpdateTime = std::chrono::steady_clock::now();
     
-    while (!m_shouldStop.load() && m_remainingSeconds.load() > 0) {
+    while (!m_shouldStop.load()) {
         auto currentTime = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             currentTime - lastUpdateTime).count();
@@ -108,11 +108,16 @@ void CountdownTimer::timerThreadFunction() {
             
             // Check if timer completed
             if (remaining <= 0) {
-                m_isRunning.store(false);
+                // Notify completion
                 if (m_callback) {
                     m_callback->onTimerCompleted();
                 }
-                break;
+                
+                // Automatically start next 5-minute cycle
+                m_remainingSeconds.store(m_totalDuration);
+                if (m_callback) {
+                    m_callback->onTimerStarted();
+                }
             }
         }
         
@@ -132,6 +137,35 @@ std::string CountdownTimer::formatTime(int seconds) const {
         << ":" << std::setfill('0') << std::setw(2) << remainingSeconds;
     
     return oss.str();
+}
+
+int CountdownTimer::calculateInitialRemainingTime() const {
+    // Get current time
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    auto tm = *std::localtime(&time_t);
+    
+    // Get current minute and second
+    int currentMinute = tm.tm_min;
+    int currentSecond = tm.tm_sec;
+    
+    // Calculate how many minutes until the next 5-minute boundary
+    int minutesToNext5MinBoundary = (5 - (currentMinute % 5)) % 5;
+    
+    // If we're exactly on a 5-minute boundary (and it's 0 seconds), start a full 5-minute countdown
+    if (minutesToNext5MinBoundary == 0 && currentSecond == 0) {
+        return m_totalDuration; // Full 5 minutes
+    }
+    
+    // Calculate total seconds to next boundary
+    int secondsToNext5MinBoundary = minutesToNext5MinBoundary * 60 - currentSecond;
+    
+    // If the result is 0, we're exactly on a boundary, so return full duration
+    if (secondsToNext5MinBoundary == 0) {
+        return m_totalDuration;
+    }
+    
+    return secondsToNext5MinBoundary;
 }
 
 } // namespace TradingTimeCounter
