@@ -30,14 +30,43 @@
 
 @end
 
-// Custom view to handle window dragging
+// Custom view to handle window dragging with rounded corners and blur effect
 @interface DraggableView : NSView {
     NSPoint initialLocation;
+    NSVisualEffectView* blurView;
 }
 @property (nonatomic, assign) TradingTimeCounter::MacOSOverlay* overlay;
 @end
 
 @implementation DraggableView
+
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) {
+        // Create blur effect view
+        if (@available(macOS 10.10, *)) {
+            blurView = [[NSVisualEffectView alloc] initWithFrame:self.bounds];
+            [blurView setMaterial:NSVisualEffectMaterialHUDWindow];
+            [blurView setBlendingMode:NSVisualEffectBlendingModeBehindWindow];
+            [blurView setState:NSVisualEffectStateActive];
+            [blurView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+            
+            // Add rounded corners
+            [blurView setWantsLayer:YES];
+            blurView.layer.cornerRadius = 8.0;
+            blurView.layer.masksToBounds = YES;
+            
+            [self addSubview:blurView];
+        } else {
+            // Fallback for older macOS versions
+            [self setWantsLayer:YES];
+            self.layer.backgroundColor = [[NSColor colorWithWhite:0.0 alpha:0.8] CGColor];
+            self.layer.cornerRadius = 8.0;
+            self.layer.masksToBounds = YES;
+        }
+    }
+    return self;
+}
 
 - (void)mouseDown:(NSEvent *)event {
     if (self.overlay && self.overlay->isDraggable()) {
@@ -311,11 +340,20 @@ bool MacOSOverlay::createWindow() {
         [m_window setDelegate:m_windowDelegate];
         [m_window setLevel:NSFloatingWindowLevel];
         [m_window setOpaque:NO];
+        [m_window setHasShadow:YES];
         [m_window setMovable:NO]; // We'll handle dragging manually
         [m_window setRestorable:NO];
         [m_window setAcceptsMouseMovedEvents:YES];
         [m_window setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces | 
                                         NSWindowCollectionBehaviorStationary];
+        
+        // Enable modern visual effects
+        if (@available(macOS 10.10, *)) {
+            [m_window setTitlebarAppearsTransparent:YES];
+        }
+        
+        // Set background to clear color for transparency
+        [m_window setBackgroundColor:[NSColor clearColor]];
         
         // Create custom draggable content view
         NSRect contentViewRect = NSMakeRect(0, 0, m_config.windowWidth, m_config.windowHeight);
@@ -333,20 +371,18 @@ bool MacOSOverlay::createWindow() {
         
         // Configure text field
         [m_textField setBezeled:NO];
-        [m_textField setDrawsBackground:YES];
+        [m_textField setDrawsBackground:NO]; // Transparent background to show blur effect
         [m_textField setEditable:NO];
         [m_textField setSelectable:NO];
         [m_textField setAlignment:NSTextAlignmentCenter];
         [m_textField setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
         
-        // Enable vertical centering by using the cell's alignment
+        // Configure the cell for better text handling
         NSTextFieldCell* cell = [m_textField cell];
         [cell setAlignment:NSTextAlignmentCenter];
         [cell setUsesSingleLineMode:YES];
         [cell setLineBreakMode:NSLineBreakByTruncatingTail];
-        
-        // Set the text field to use the center baseline
-        [m_textField setBaselineAdjustment:NSBaselineAdjustmentAlignCenters];
+        [cell setDrawsBackground:NO]; // Ensure cell background is also transparent
         
         // Add text field to window
         [[m_window contentView] addSubview:m_textField];
@@ -388,12 +424,7 @@ void MacOSOverlay::updateAppearance() {
                                                 alpha:1.0];
             [m_textField setTextColor:textColor];
             
-            // Set background color with opacity
-            NSColor* backgroundColor = [NSColor colorWithRed:m_config.backgroundColor.r / 255.0
-                                                      green:m_config.backgroundColor.g / 255.0
-                                                       blue:m_config.backgroundColor.b / 255.0
-                                                      alpha:m_config.opacity / 255.0];
-            [m_textField setBackgroundColor:backgroundColor];
+            // No background color needed - using blur effect instead
         }
         
         if (m_window) {

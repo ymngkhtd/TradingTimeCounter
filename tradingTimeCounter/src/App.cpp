@@ -39,8 +39,8 @@ bool App::initialize(const DisplayConfig& displayConfig) {
             return false;
         }
         
-        // Set timer callback - use raw pointer for owned object
-        m_timer->setCallbackRaw(this);
+        // Set timer callback - create shared_ptr from this
+        m_timer->setCallback(std::shared_ptr<ITimerCallback>(this, [](ITimerCallback*){}));
         
         // Create display component
         std::cout << "Creating display manager..." << std::endl;
@@ -197,10 +197,8 @@ const DisplayConfig& App::getDisplayConfig() const {
 
 // ITimerCallback interface implementation
 void App::onTimerUpdate(int remainingSeconds) {
-    std::cout << "DEBUG: onTimerUpdate called with remainingSeconds=" << remainingSeconds << std::endl;
     if (m_display) {
         std::string formattedTime = m_timer->getFormattedTime();
-        std::cout << "DEBUG: Updating display with time: " << formattedTime << std::endl;
         m_display->updateText(formattedTime);
     }
     // Only log significant timer milestones to reduce output
@@ -221,11 +219,11 @@ void App::onTimerCompleted() {
 }
 
 void App::onTimerStarted() {
-    std::cout << "DEBUG: Timer started callback called" << std::endl;
+    std::cout << "Timer started" << std::endl;
 }
 
 void App::onTimerStopped() {
-    std::cout << "DEBUG: Timer stopped callback called" << std::endl;
+    std::cout << "Timer stopped" << std::endl;
 }
 
 void App::onWindowCloseRequested() {
