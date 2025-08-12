@@ -1,44 +1,63 @@
 # Trading Time Counter
 
-## System Functionality
-The Trading Time Counter is a cross-platform desktop application that displays a five-minute countdown timer at the top of the screen. The application is currently implemented for Windows, with plans for cross-platform support in the future.
+A cross-platform desktop application that displays a 5-minute countdown timer overlay for trading sessions.
 
-## Architecture Design
-The application follows a high-cohesion, low-coupling design with the following modules:
+## Features
 
-### Core Modules
-- **Timer Module**: Pure logic module for countdown functionality
-  - `CountdownTimer`: Core countdown implementation
-  - `ITimerCallback`: Callback interface for timer events
-- **Display Module**: Abstract display interface for cross-platform support
-  - `IDisplayManager`: Abstract display management interface
-  - `WindowsOverlay`: Windows-specific top-level window implementation
-- **Application Module**: Application lifecycle and coordination
-  - `App`: Main application class
-  - `main.cpp`: Entry point
+- 5-minute countdown timer with overlay display
+- Always-on-top window that stays above all applications
+- Draggable positioning
+- Windows support (cross-platform architecture ready)
 
-### Features
-- Fixed 5-minute countdown timer
-- Configurable font, color, and size
-- Mouse draggable positioning with lock/unlock option
-- Always-on-top display
-- Cross-platform architecture (Windows first, extensible)
+## Requirements
 
-## Dependencies
-- C++17 or higher
-- CMake for building the project
+- C++17 compiler
+- CMake 3.16+
+- Windows SDK (for Windows builds)
 
-## Usage Instructions
-1. Clone the repository to your local machine.
-2. Navigate to the project directory.
-3. Create a build directory and navigate into it:
-   mkdir build
-   cd build
-4. Run CMake to configure the project:
-   cmake ..
-5. Build the application:
-   cmake --build .
-6. Run the application:
-   ./tradingTimeCounter
+## Quick Start
 
-This will start the countdown timer, which will be displayed at the top of the screen.
+### Windows
+
+```bash
+# Build using provided script
+.\build.ps1
+
+# Or manually
+mkdir build && cd build
+cmake .. -G "Visual Studio 17 2022" -A x64
+cmake --build . --config Release
+```
+
+### Run
+
+```bash
+# From build directory
+.\Release\tradingTimeCounter.exe
+
+# Or from root directory after build
+.\build\Release\tradingTimeCounter.exe
+```
+
+## Project Structure
+
+```
+TradingTimeCounter/
+├── tradingTimeCounter/          # Source code
+│   ├── src/                     # Implementation files
+│   ├── include/                 # Header files
+│   └── CMakeLists.txt          # Build configuration
+├── build.ps1                   # Windows build script
+├── build.sh                    # Unix build script
+└── CMakeLists.txt              # Root build configuration
+```
+
+## Development
+
+The application uses a modular architecture:
+- **TimerCore**: Static library with core functionality
+- **tradingTimeCounter**: Main executable
+
+Built artifacts:
+- `TimerCore.lib` - Core timer library
+- `tradingTimeCounter.exe` - Main application
