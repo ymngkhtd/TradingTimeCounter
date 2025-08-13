@@ -3,6 +3,7 @@
 #include "ITimerCallback.h"
 #include "IDisplayManager.h"
 #include "CountdownTimer.h"
+#include "ConfigManager.h"
 #include <memory>
 #include <string>
 
@@ -17,10 +18,11 @@ namespace TradingTimeCounter {
  */
 class App : public ITimerCallback {
 public:
-    /**
+        /**
      * @brief Constructor
+     * @param configManager Shared pointer to configuration manager
      */
-    App();
+    explicit App(std::shared_ptr<ConfigManager> configManager);
     
     /**
      * @brief Destructor
@@ -30,13 +32,6 @@ public:
     // Disable copy constructor and assignment operator
     App(const App&) = delete;
     App& operator=(const App&) = delete;
-    
-    /**
-     * @brief Initialize the application
-     * @param displayConfig Initial display configuration
-     * @return true if initialization successful, false otherwise
-     */
-    bool initialize(const DisplayConfig& displayConfig = DisplayConfig{});
     
     /**
      * @brief Start the application (show window and start timer)
@@ -82,6 +77,30 @@ public:
     void resetTimer();
     
     /**
+     * @brief Set auto-restart behavior for timer cycles
+     * @param autoRestart true to automatically restart timer after completion
+     */
+    void setAutoRestart(bool autoRestart);
+    
+    /**
+     * @brief Check if auto-restart is enabled
+     * @return true if auto-restart is enabled
+     */
+    bool isAutoRestartEnabled() const;
+    
+    /**
+     * @brief Save current configuration to file
+     * @return true if saved successfully
+     */
+    bool saveConfig();
+    
+    /**
+     * @brief Get current application configuration
+     * @return Current configuration
+     */
+    ConfigManager::AppConfig getCurrentConfig() const;
+    
+    /**
      * @brief Get current display configuration
      * @return Current display configuration
      */
@@ -116,10 +135,12 @@ private:
     // Core components
     std::unique_ptr<CountdownTimer> m_timer;           ///< Timer component
     std::unique_ptr<IDisplayManager> m_display;        ///< Display component
+    std::shared_ptr<ConfigManager> m_configManager;    ///< Configuration manager
     
     // Application state
     bool m_isRunning;                                  ///< Application running state
     bool m_shouldExit;                                 ///< Exit request flag
+    bool m_autoRestart;                                ///< Auto-restart timer cycles
     DisplayConfig m_displayConfig;                     ///< Current display configuration
     
     // Constants

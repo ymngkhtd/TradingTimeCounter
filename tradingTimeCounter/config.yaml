@@ -1,0 +1,39 @@
+# TradingTimeCounter Configuration File
+configVersion: "1.0"
+
+# Timer settings
+timerDurationMinutes: 1
+autoRestart: true
+startMinimized: false
+
+# Display configuration
+display:
+  # Font settings
+  font:
+    family: "Arial"
+    size: 24
+    bold: true
+  
+  # Color settings (RGB values 0-255)
+  colors:
+    text:
+      r: 255
+      g: 255
+      b: 255
+    background:
+      r: 0
+      g: 0
+      b: 0
+  
+  # Window settings
+  window:
+    width: 120
+    height: 50
+    opacity: 200  # 0-255, 200 = ~78% opacity
+  
+  # Position settings
+  position:
+    x: 100
+    y: 100
+    draggable: true
+    locked: false

@@ -16,27 +16,29 @@ namespace TradingTimeCounter {
 // Static member definition
 const int App::TIMER_DURATION_MINUTES;
 
-App::App()
+App::App(std::shared_ptr<ConfigManager> configManager)
     : m_timer(nullptr)
     , m_display(nullptr)
+    , m_configManager(configManager)
     , m_isRunning(false)
-    , m_shouldExit(false) {
-}
-
-App::~App() {
-    shutdown();
-}
-
-bool App::initialize(const DisplayConfig& displayConfig) {
+    , m_shouldExit(false)
+    , m_autoRestart(true) {
+    
+    if (!m_configManager) {
+        std::cerr << "ConfigManager is required" << std::endl;
+        throw std::invalid_argument("ConfigManager cannot be null");
+    }
+    
+    // Get configuration from ConfigManager
+    const auto& appConfig = m_configManager->getConfig();
+    m_displayConfig = appConfig.display;
+    m_autoRestart = appConfig.autoRestart;
+    
     try {
-        // Store configuration
-        m_displayConfig = displayConfig;
-        
         // Create timer component
-        m_timer = std::make_unique<CountdownTimer>(TIMER_DURATION_MINUTES);
+        m_timer = std::make_unique<CountdownTimer>(appConfig.timerDurationMinutes);
         if (!m_timer) {
-            std::cerr << "Failed to create timer component" << std::endl;
-            return false;
+            throw std::runtime_error("Failed to create timer component");
         }
         
         // Set timer callback - create shared_ptr from this
@@ -46,15 +48,13 @@ bool App::initialize(const DisplayConfig& displayConfig) {
         std::cout << "Creating display manager..." << std::endl;
         m_display = createDisplayManager();
         if (!m_display) {
-            std::cerr << "Failed to create display manager" << std::endl;
-            return false;
+            throw std::runtime_error("Failed to create display manager");
         }
         
         // Initialize display
         std::cout << "Initializing display with config..." << std::endl;
         if (!m_display->initialize(m_displayConfig)) {
-            std::cerr << "Failed to initialize display" << std::endl;
-            return false;
+            throw std::runtime_error("Failed to initialize display");
         }
         
         // Set display callbacks
@@ -65,23 +65,21 @@ bool App::initialize(const DisplayConfig& displayConfig) {
         m_display->updateText(m_timer->getFormattedTime());
         
         std::cout << "Application initialized successfully" << std::endl;
-        return true;
         
     } catch (const std::exception& e) {
         std::cerr << "Exception during initialization: " << e.what() << std::endl;
-        return false;
+        throw;
     }
 }
 
+App::~App() {
+    shutdown();
+}
+
 void App::start() {
-    if (!m_timer || !m_display) {
-        std::cerr << "Cannot start: application not properly initialized" << std::endl;
-        return;
-    }
-    
 #ifdef __APPLE__
     // Initialize macOS application
-    MacOSEventProcessor::initializeApplication();
+    // MacOSEventProcessor::initializeApplication();
 #endif
     
     m_isRunning = true;
@@ -93,7 +91,8 @@ void App::start() {
     // Start timer
     m_timer->start();
     
-    std::cout << "Application started - Timer: " << TIMER_DURATION_MINUTES << " minutes" << std::endl;
+    const auto& config = m_configManager->getConfig();
+    std::cout << "Application started - Timer: " << config.timerDurationMinutes << " minutes" << std::endl;
 }
 
 void App::stop() {
@@ -195,6 +194,15 @@ const DisplayConfig& App::getDisplayConfig() const {
     return m_displayConfig;
 }
 
+void App::setAutoRestart(bool autoRestart) {
+    m_autoRestart = autoRestart;
+    std::cout << "Auto-restart " << (autoRestart ? "enabled" : "disabled") << std::endl;
+}
+
+bool App::isAutoRestartEnabled() const {
+    return m_autoRestart;
+}
+
 // ITimerCallback interface implementation
 void App::onTimerUpdate(int remainingSeconds) {
     if (m_display) {
@@ -214,8 +222,15 @@ void App::onTimerCompleted() {
         m_display->updateText("00:00");
     }
     
-    // Optional: Show completion notification or perform other actions
-    // For now, we keep the display showing 00:00
+    // Only auto-restart if enabled
+    if (m_autoRestart && m_timer) {
+        // Reset to calculate new boundary time and restart
+        m_timer->reset();
+        m_timer->start();
+        std::cout << "Auto-restarting timer for next 5-minute cycle" << std::endl;
+    } else {
+        std::cout << "Timer cycle completed. Auto-restart is disabled." << std::endl;
+    }
 }
 
 void App::onTimerStarted() {
@@ -235,6 +250,35 @@ void App::onWindowPositionChanged(int x, int y) {
     m_displayConfig.positionX = x;
     m_displayConfig.positionY = y;
     // Note: Position change is already handled by the display manager
+}
+
+bool App::saveConfig() {
+    if (!m_configManager) {
+        std::cerr << "ConfigManager not available for saving" << std::endl;
+        return false;
+    }
+    
+    // Get current configuration
+    auto currentConfig = getCurrentConfig();
+    
+    // Update ConfigManager with current settings
+    m_configManager->updateConfig(currentConfig);
+    
+    // Save to file
+    return m_configManager->saveConfig();
+}
+
+ConfigManager::AppConfig App::getCurrentConfig() const {
+    ConfigManager::AppConfig config;
+    
+    // Get current settings
+    config.display = m_displayConfig;
+    config.autoRestart = m_autoRestart;
+    config.timerDurationMinutes = TIMER_DURATION_MINUTES;
+    config.startMinimized = false; // Default value
+    config.configVersion = "1.0";
+    
+    return config;
 }
 
 std::unique_ptr<IDisplayManager> App::createDisplayManager() {

@@ -66,8 +66,8 @@ void CountdownTimer::reset() {
         stop();
     }
     
-    // Reset remaining time
-    m_remainingSeconds.store(m_totalDuration);
+    // Reset remaining time to next 5-minute boundary
+    m_remainingSeconds.store(calculateInitialRemainingTime());
     
     // Restart if it was running
     if (wasRunning) {
@@ -101,23 +101,22 @@ void CountdownTimer::timerThreadFunction() {
             m_remainingSeconds.store(remaining);
             lastUpdateTime = currentTime;
             
-            // Notify callback of update
             if (m_callback) {
                 m_callback->onTimerUpdate(remaining);
             }
-            
+
             // Check if timer completed
             if (remaining <= 0) {
+                // Timer has completed, stop running
+                m_isRunning.store(false);
+                
                 // Notify completion
                 if (m_callback) {
                     m_callback->onTimerCompleted();
                 }
                 
-                // Automatically start next 5-minute cycle
-                m_remainingSeconds.store(m_totalDuration);
-                if (m_callback) {
-                    m_callback->onTimerStarted();
-                }
+                // Break out of the loop since the timer is now stopped
+                break;
             }
         }
         
