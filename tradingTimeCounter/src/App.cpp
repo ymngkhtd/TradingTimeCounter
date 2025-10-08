@@ -1,9 +1,14 @@
 #include "tradingTimeCounter/App.h"
 #include <iostream>
+#include <thread>
+#include <chrono>
 
 #ifdef _WIN32
 #include "tradingTimeCounter/WindowsOverlay.h"
 #include <windows.h>
+#elif __APPLE__
+#include "tradingTimeCounter/MacOSOverlay.h"
+#include "tradingTimeCounter/MacOSEventProcessor.h"
 #endif
 
 namespace TradingTimeCounter {
@@ -11,46 +16,45 @@ namespace TradingTimeCounter {
 // Static member definition
 const int App::TIMER_DURATION_MINUTES;
 
-App::App()
+App::App(std::shared_ptr<ConfigManager> configManager)
     : m_timer(nullptr)
     , m_display(nullptr)
+    , m_configManager(configManager)
     , m_isRunning(false)
-    , m_shouldExit(false) {
-}
-
-App::~App() {
-    shutdown();
-}
-
-bool App::initialize(const DisplayConfig& displayConfig) {
+    , m_shouldExit(false)
+    , m_autoRestart(true) {
+    
+    if (!m_configManager) {
+        std::cerr << "ConfigManager is required" << std::endl;
+        throw std::invalid_argument("ConfigManager cannot be null");
+    }
+    
+    // Get configuration from ConfigManager
+    const auto& appConfig = m_configManager->getConfig();
+    m_displayConfig = appConfig.display;
+    m_autoRestart = appConfig.autoRestart;
+    
     try {
-        // Store configuration
-        m_displayConfig = displayConfig;
-        
         // Create timer component
-        m_timer = std::make_unique<CountdownTimer>(TIMER_DURATION_MINUTES);
+        m_timer = std::make_unique<CountdownTimer>(appConfig.timerDurationMinutes);
         if (!m_timer) {
-            std::cerr << "Failed to create timer component" << std::endl;
-            return false;
+            throw std::runtime_error("Failed to create timer component");
         }
         
-        // Set timer callback - create a proper shared_ptr
-        auto selfCallback = std::shared_ptr<ITimerCallback>(std::shared_ptr<ITimerCallback>{}, this);
-        m_timer->setCallback(selfCallback);
+        // Set timer callback - create shared_ptr from this
+        m_timer->setCallback(std::shared_ptr<ITimerCallback>(this, [](ITimerCallback*){}));
         
         // Create display component
         std::cout << "Creating display manager..." << std::endl;
         m_display = createDisplayManager();
         if (!m_display) {
-            std::cerr << "Failed to create display manager" << std::endl;
-            return false;
+            throw std::runtime_error("Failed to create display manager");
         }
         
         // Initialize display
         std::cout << "Initializing display with config..." << std::endl;
         if (!m_display->initialize(m_displayConfig)) {
-            std::cerr << "Failed to initialize display" << std::endl;
-            return false;
+            throw std::runtime_error("Failed to initialize display");
         }
         
         // Set display callbacks
@@ -61,19 +65,22 @@ bool App::initialize(const DisplayConfig& displayConfig) {
         m_display->updateText(m_timer->getFormattedTime());
         
         std::cout << "Application initialized successfully" << std::endl;
-        return true;
         
     } catch (const std::exception& e) {
         std::cerr << "Exception during initialization: " << e.what() << std::endl;
-        return false;
+        throw;
     }
 }
 
+App::~App() {
+    shutdown();
+}
+
 void App::start() {
-    if (!m_timer || !m_display) {
-        std::cerr << "Cannot start: application not properly initialized" << std::endl;
-        return;
-    }
+#ifdef __APPLE__
+    // Initialize macOS application
+    // MacOSEventProcessor::initializeApplication();
+#endif
     
     m_isRunning = true;
     m_shouldExit = false;
@@ -84,7 +91,8 @@ void App::start() {
     // Start timer
     m_timer->start();
     
-    std::cout << "Application started - Timer: " << TIMER_DURATION_MINUTES << " minutes" << std::endl;
+    const auto& config = m_configManager->getConfig();
+    std::cout << "Application started - Timer: " << config.timerDurationMinutes << " minutes" << std::endl;
 }
 
 void App::stop() {
@@ -121,6 +129,15 @@ int App::run() {
         
         // Small sleep to prevent high CPU usage
         Sleep(10);
+    }
+#elif __APPLE__
+    // macOS event loop on main thread
+    while (!m_shouldExit) {
+        // Process macOS events
+        MacOSEventProcessor::processPendingEvents();
+        
+        // Small sleep to prevent high CPU usage
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 #else
     // For other platforms, we'll need different message loop implementation
@@ -177,10 +194,20 @@ const DisplayConfig& App::getDisplayConfig() const {
     return m_displayConfig;
 }
 
+void App::setAutoRestart(bool autoRestart) {
+    m_autoRestart = autoRestart;
+    std::cout << "Auto-restart " << (autoRestart ? "enabled" : "disabled") << std::endl;
+}
+
+bool App::isAutoRestartEnabled() const {
+    return m_autoRestart;
+}
+
 // ITimerCallback interface implementation
 void App::onTimerUpdate(int remainingSeconds) {
     if (m_display) {
-        m_display->updateText(m_timer->getFormattedTime());
+        std::string formattedTime = m_timer->getFormattedTime();
+        m_display->updateText(formattedTime);
     }
     // Only log significant timer milestones to reduce output
     if (remainingSeconds % 30 == 0 || remainingSeconds <= 10) {
@@ -195,8 +222,15 @@ void App::onTimerCompleted() {
         m_display->updateText("00:00");
     }
     
-    // Optional: Show completion notification or perform other actions
-    // For now, we keep the display showing 00:00
+    // Only auto-restart if enabled
+    if (m_autoRestart && m_timer) {
+        // Reset to calculate new boundary time and restart
+        m_timer->reset();
+        m_timer->start();
+        std::cout << "Auto-restarting timer for next 5-minute cycle" << std::endl;
+    } else {
+        std::cout << "Timer cycle completed. Auto-restart is disabled." << std::endl;
+    }
 }
 
 void App::onTimerStarted() {
@@ -218,9 +252,40 @@ void App::onWindowPositionChanged(int x, int y) {
     // Note: Position change is already handled by the display manager
 }
 
+bool App::saveConfig() {
+    if (!m_configManager) {
+        std::cerr << "ConfigManager not available for saving" << std::endl;
+        return false;
+    }
+    
+    // Get current configuration
+    auto currentConfig = getCurrentConfig();
+    
+    // Update ConfigManager with current settings
+    m_configManager->updateConfig(currentConfig);
+    
+    // Save to file
+    return m_configManager->saveConfig();
+}
+
+ConfigManager::AppConfig App::getCurrentConfig() const {
+    ConfigManager::AppConfig config;
+    
+    // Get current settings
+    config.display = m_displayConfig;
+    config.autoRestart = m_autoRestart;
+    config.timerDurationMinutes = TIMER_DURATION_MINUTES;
+    config.startMinimized = false; // Default value
+    config.configVersion = "1.0";
+    
+    return config;
+}
+
 std::unique_ptr<IDisplayManager> App::createDisplayManager() {
 #ifdef _WIN32
     return std::make_unique<WindowsOverlay>();
+#elif __APPLE__
+    return std::make_unique<MacOSOverlay>();
 #else
     // For other platforms, create appropriate display manager
     std::cerr << "Display manager not implemented for this platform" << std::endl;

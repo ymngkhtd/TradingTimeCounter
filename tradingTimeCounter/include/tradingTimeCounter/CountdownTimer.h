@@ -82,6 +82,12 @@ private:
      * @return Formatted string
      */
     std::string formatTime(int seconds) const;
+    
+    /**
+     * @brief Calculate initial remaining time to next 5-minute boundary
+     * @return Seconds until next 5-minute interval
+     */
+    int calculateInitialRemainingTime() const;
 
 private:
     const int m_totalDuration;                           ///< Total timer duration in seconds
